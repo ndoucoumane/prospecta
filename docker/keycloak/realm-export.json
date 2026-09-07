@@ -1,0 +1,105 @@
+{
+  "realm": "prospecta",
+  "enabled": true,
+  "registrationAllowed": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "SUPER_ADMIN",
+        "description": "Global administrator of Prospecta platform"
+      },
+      {
+        "name": "ORG_ADMIN",
+        "description": "Administrator of a specific organization"
+      },
+      {
+        "name": "SALES_MANAGER",
+        "description": "Manager of campaigns, prospects and sales teams"
+      },
+      {
+        "name": "SALES_REP",
+        "description": "Sales representative handling assigned prospects and conversations"
+      },
+      {
+        "name": "VIEWER",
+        "description": "Read-only viewer"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "prospecta-backend",
+      "name": "Prospecta Backend API",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "roles",
+        "email"
+      ]
+    },
+    {
+      "clientId": "prospecta-frontend",
+      "name": "Prospecta Frontend Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:5173"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@prospecta.sn",
+      "email": "admin@prospecta.sn",
+      "firstName": "Admin",
+      "lastName": "Prospecta",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "prospecta123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "SUPER_ADMIN"
+      ]
+    },
+    {
+      "username": "mory@techdakar.sn",
+      "email": "mory@techdakar.sn",
+      "firstName": "Mory",
+      "lastName": "Diallo",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "prospecta123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ORG_ADMIN"
+      ]
+    }
+  ]
+}
