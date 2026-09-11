@@ -36,7 +36,7 @@ public final class ConversationDto {
         public static ConversationSummaryResponse from(Conversation conversation) {
             return ConversationSummaryResponse.builder()
                     .id(conversation.getId())
-                    .prospectId(conversation.getProspectId())
+                    .prospectId(conversation.getProspect() != null ? conversation.getProspect().getId() : null)
                     .prospectName(conversation.getProspect() != null ? conversation.getProspect().getFullName() : "Prospect")
                     .companyName(conversation.getProspect() != null ? conversation.getProspect().getCompanyName() : "")
                     .channel(conversation.getChannel())
@@ -91,7 +91,7 @@ public final class ConversationDto {
         public static ConversationDetailResponse from(Conversation conv, List<ConversationMessage> messages) {
             return ConversationDetailResponse.builder()
                     .id(conv.getId())
-                    .prospectId(conv.getProspectId())
+                    .prospectId(conv.getProspect() != null ? conv.getProspect().getId() : null)
                     .prospectName(conv.getProspect() != null ? conv.getProspect().getFullName() : "Prospect")
                     .companyName(conv.getProspect() != null ? conv.getProspect().getCompanyName() : "")
                     .channel(conv.getChannel())

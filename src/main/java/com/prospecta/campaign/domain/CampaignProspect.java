@@ -42,12 +42,4 @@ public class CampaignProspect extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
-
-    public UUID getCampaignId() {
-        return campaign != null ? campaign.getId() : null;
-    }
-
-    public UUID getProspectId() {
-        return prospect != null ? prospect.getId() : null;
-    }
 }

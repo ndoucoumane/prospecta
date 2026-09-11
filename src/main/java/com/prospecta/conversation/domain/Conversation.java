@@ -47,8 +47,4 @@ public class Conversation extends TenantAwareEntity {
     @OrderBy("sentAt ASC")
     @Builder.Default
     private List<ConversationMessage> messages = new ArrayList<>();
-
-    public UUID getProspectId() {
-        return prospect != null ? prospect.getId() : null;
-    }
 }

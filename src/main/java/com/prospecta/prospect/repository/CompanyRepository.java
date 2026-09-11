@@ -14,6 +14,8 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     Optional<Company> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
+    Optional<Company> findByOrganizationIdAndExternalId(UUID organizationId, String externalId);
+
     Optional<Company> findByOrganizationIdAndNameIgnoreCase(UUID organizationId, String name);
 
     Optional<Company> findByOrganizationIdAndWebsite(UUID organizationId, String website);

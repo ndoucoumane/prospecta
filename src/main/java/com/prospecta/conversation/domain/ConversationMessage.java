@@ -52,8 +52,4 @@ public class ConversationMessage extends BaseEntity {
     @Column(name = "sent_at", nullable = false)
     @Builder.Default
     private Instant sentAt = Instant.now();
-
-    public UUID getConversationId() {
-        return conversation != null ? conversation.getId() : null;
-    }
 }

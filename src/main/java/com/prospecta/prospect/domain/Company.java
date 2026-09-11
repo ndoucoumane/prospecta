@@ -54,6 +54,9 @@ public class Company extends TenantAwareEntity {
     @Column(name = "instagram_url")
     private String instagramUrl;
 
+    @Column(name = "external_id", length = 150)
+    private String externalId;
+
     @Column(name = "source", length = 100)
     private String source;
 

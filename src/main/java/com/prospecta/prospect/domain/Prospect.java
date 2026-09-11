@@ -79,6 +79,9 @@ public class Prospect extends TenantAwareEntity {
     @Column(name = "instagram_url")
     private String instagramUrl;
 
+    @Column(name = "external_id", length = 150)
+    private String externalId;
+
     @Column(name = "source", nullable = false, length = 100)
     @Builder.Default
     private String source = "MANUAL";

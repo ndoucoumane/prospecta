@@ -60,7 +60,7 @@ cp .env.example .env
 docker compose up -d
 ```
 Les services suivants seront immédiatement disponibles :
-* **PostgreSQL 16** : `localhost:5432` (`prospecta_db` / `prospecta` / `prospecta_dev_password`)
+* **PostgreSQL 16** : `localhost:5435` (`prospecta_db` / `prospecta` / `prospecta_dev_password`)
 * **Redis 7** : `localhost:6379`
 * **Apache Kafka (KRaft)** : `localhost:9092`
 * **Keycloak 24** : `http://localhost:8081` (Admin: `admin` / `admin`) avec le realm `prospecta` pré-importé

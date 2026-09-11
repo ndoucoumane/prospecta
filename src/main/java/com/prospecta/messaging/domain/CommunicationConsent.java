@@ -39,8 +39,4 @@ public class CommunicationConsent extends TenantAwareEntity {
 
     @Column(name = "revoked_at")
     private Instant revokedAt;
-
-    public UUID getProspectId() {
-        return prospect != null ? prospect.getId() : null;
-    }
 }

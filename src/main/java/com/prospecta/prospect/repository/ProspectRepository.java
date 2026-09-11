@@ -17,6 +17,8 @@ public interface ProspectRepository extends JpaRepository<Prospect, UUID> {
 
     Optional<Prospect> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
+    Optional<Prospect> findByOrganizationIdAndExternalId(UUID organizationId, String externalId);
+
     Optional<Prospect> findByOrganizationIdAndEmailIgnoreCase(UUID organizationId, String email);
 
     Optional<Prospect> findByOrganizationIdAndPhone(UUID organizationId, String phone);

@@ -24,6 +24,7 @@
         <jsoup.version>1.18.1</jsoup.version>
         <opencsv.version>5.9</opencsv.version>
         <testcontainers.version>1.20.1</testcontainers.version>
+        <stripe.version>26.1.0</stripe.version>
     </properties>
 
     <dependencies>
@@ -115,6 +116,13 @@
             <groupId>com.opencsv</groupId>
             <artifactId>opencsv</artifactId>
             <version>${opencsv.version}</version>
+        </dependency>
+
+        <!-- Stripe Payments & Billing SDK -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>${stripe.version}</version>
         </dependency>
 
         <!-- Developer Tools & Boilerplate reduction -->

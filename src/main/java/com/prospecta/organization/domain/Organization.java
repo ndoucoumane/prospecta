@@ -1,8 +1,11 @@
 package com.prospecta.organization.domain;
 
+import com.prospecta.billing.domain.SubscriptionStatus;
 import com.prospecta.shared.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.Instant;
 
 @Getter
 @Setter
@@ -52,4 +55,18 @@ public class Organization extends BaseEntity {
     @Column(name = "plan", nullable = false, length = 50)
     @Builder.Default
     private OrganizationPlan plan = OrganizationPlan.FREE;
+
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
+    @Column(name = "stripe_subscription_id")
+    private String stripeSubscriptionId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subscription_status", length = 50)
+    @Builder.Default
+    private SubscriptionStatus subscriptionStatus = SubscriptionStatus.ACTIVE;
+
+    @Column(name = "current_period_end")
+    private Instant currentPeriodEnd;
 }

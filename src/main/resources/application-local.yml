@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:prospecta_db}
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5435}/${DATABASE_NAME:prospecta_db}
     username: ${DATABASE_USERNAME:prospecta}
     password: ${DATABASE_PASSWORD:prospecta_dev_password}
     driver-class-name: org.postgresql.Driver

@@ -65,8 +65,4 @@ public class Message extends TenantAwareEntity {
 
     @Column(name = "read_at")
     private Instant readAt;
-
-    public UUID getProspectId() {
-        return prospect != null ? prospect.getId() : null;
-    }
 }

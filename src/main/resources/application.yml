@@ -101,3 +101,22 @@ prospecta:
       app-secret: ${WHATSAPP_APP_SECRET:}
   campaign:
     max-concurrent: ${CAMPAIGN_MAX_CONCURRENT:10}
+  billing:
+    stripe:
+      api-key: ${STRIPE_API_KEY:sk_test_placeholder}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_placeholder}
+    plans:
+      starter:
+        price-id: ${STRIPE_PRICE_STARTER:price_starter_test}
+        amount: 29000
+        currency: XOF
+      business:
+        price-id: ${STRIPE_PRICE_BUSINESS:price_business_test}
+        amount: 79000
+        currency: XOF
+
+# Apollo B2B Data Provider Configuration
+apollo:
+  base-url: ${APOLLO_BASE_URL:https://api.apollo.io}
+  api-key: ${APOLLO_API_KEY:}
+  timeout-seconds: ${APOLLO_TIMEOUT_SECONDS:15}
