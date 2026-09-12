@@ -6,6 +6,13 @@ spring:
   main:
     banner-mode: console
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:${KEYCLOAK_AUTH_SERVER_URL:https://auth.clatous.com}/realms/${KEYCLOAK_REALM:clatous-production}}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${KEYCLOAK_AUTH_SERVER_URL:https://auth.clatous.com}/realms/${KEYCLOAK_REALM:clatous-production}/protocol/openid-connect/certs}
+
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -32,7 +39,7 @@ spring:
     locations: classpath:db/migration
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:8085}
   error:
     include-message: never
     include-binding-errors: never
@@ -85,6 +92,11 @@ prospecta:
       allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
       allowed-headers: "*"
       allow-credentials: true
+    keycloak:
+      realm: ${KEYCLOAK_REALM:clatous-production}
+      auth-server-url: ${KEYCLOAK_AUTH_SERVER_URL:https://auth.clatous.com}
+      client-id: ${KEYCLOAK_CLIENT_ID:clatous-backend-prod}
+      client-secret: ${KEYCLOAK_CLIENT_SECRET:QWyJjXyZ7GPibKO21mw10lY3J2AzJlvqoU2IA6ODHxLlumIynJVPQxLzJolNYxRc2toMheLInzdcKYLeMStJKE}
   features:
     whatsapp-enabled: ${WHATSAPP_ENABLED:false}
     sms-enabled: ${SMS_ENABLED:false}
@@ -120,3 +132,15 @@ apollo:
   base-url: ${APOLLO_BASE_URL:https://api.apollo.io}
   api-key: ${APOLLO_API_KEY:}
   timeout-seconds: ${APOLLO_TIMEOUT_SECONDS:15}
+
+# Keycloak Identity Provider (IdP) Configuration
+keycloak:
+  realm: ${KEYCLOAK_REALM:clatous-production}
+  auth-server-url: ${KEYCLOAK_AUTH_SERVER_URL:https://auth.clatous.com}
+  client-id: ${KEYCLOAK_CLIENT_ID:clatous-backend-prod}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:QWyJjXyZ7GPibKO21mw10lY3J2AzJlvqoU2IA6ODHxLlumIynJVPQxLzJolNYxRc2toMheLInzdcKYLeMStJKE}
+  admin-username: ${KEYCLOAK_ADMIN_USERNAME:keycloak-admin}
+  admin-password: ${KEYCLOAK_ADMIN_PASSWORD:soloSaliou10@}
+  admin-realm: ${KEYCLOAK_ADMIN_REALM:master}
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET:QWyJjXyZ7GPibKO21mw10lY3J2AzJlvqoU2IA6ODHxLlumIynJVPQxLzJolNYxRc2toMheLInzdcKYLeMStJKE}

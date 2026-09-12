@@ -35,8 +35,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/prospecta}
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8081/realms/prospecta/protocol/openid-connect/certs}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:https://auth.clatous.com/realms/clatous-production}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:https://auth.clatous.com/realms/clatous-production/protocol/openid-connect/certs}
 
 logging:
   level:

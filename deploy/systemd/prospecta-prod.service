@@ -1,0 +1,38 @@
+[Unit]
+Description=Prospecta SaaS Backend (Environnement Production)
+After=network.target postgresql.service redis.service kafka.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prospecta
+Group=prospecta
+WorkingDirectory=/opt/prospecta/production
+EnvironmentFile=/opt/prospecta/production/prospecta-prod.env
+
+# Execution avec Java 21, profil prod et port 8080
+ExecStart=/usr/bin/java \
+    -Dspring.profiles.active=prod \
+    -Dserver.port=8085 \
+    -Xms512m -Xmx1024m \
+    -XX:+UseG1GC \
+    -XX:+ExitOnOutOfMemoryError \
+    -jar /opt/prospecta/production/prospecta-backend.jar
+
+# Gestion du cycle de vie et redémarrage automatique
+Restart=always
+RestartSec=10s
+TimeoutStopSec=30s
+SuccessExitStatus=143
+
+# Logs vers journalctl
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prospecta-prod
+
+# Durcissement de sécurité systemd
+LimitNOFILE=65536
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,38 @@
+[Unit]
+Description=Prospecta SaaS Backend (Environnement Staging)
+After=network.target postgresql.service redis.service kafka.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prospecta
+Group=prospecta
+WorkingDirectory=/opt/prospecta/staging
+EnvironmentFile=/opt/prospecta/staging/prospecta-staging.env
+
+# Execution avec Java 21, profil staging et port 8082
+ExecStart=/usr/bin/java \
+    -Dspring.profiles.active=staging \
+    -Dserver.port=8082 \
+    -Xms256m -Xmx512m \
+    -XX:+UseG1GC \
+    -XX:+ExitOnOutOfMemoryError \
+    -jar /opt/prospecta/staging/prospecta-backend.jar
+
+# Gestion du cycle de vie et redémarrage automatique
+Restart=always
+RestartSec=10s
+TimeoutStopSec=30s
+SuccessExitStatus=143
+
+# Logs vers journalctl
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prospecta-staging
+
+# Durcissement de sécurité systemd
+LimitNOFILE=65536
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

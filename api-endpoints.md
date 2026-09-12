@@ -14,6 +14,7 @@ Chaque endpoint est documenté avec :
 ## 📌 Sommaire
 
 1. [Conventions Globales, Authentification & Enveloppes](#-1-conventions-globales-authentification--enveloppes)
+   - [🔐 1.1 Inscription, Connexion & Session (`/api/v1/auth`)](#-11-inscription-connexion--session-apiv1auth)
 2. [Énumérations & Valeurs Métier](#-2-énumérations--valeurs-métier)
 3. [Organisations & Espaces de Travail (`/api/v1/organizations`)](#-3-organisations--espaces-de-travail-apiv1organizations)
 4. [Profils Utilisateurs & Équipe (`/api/v1/users`)](#-4-profils-utilisateurs--équipe-apiv1users)
@@ -31,24 +32,38 @@ Chaque endpoint est documenté avec :
 16. [Listes de Prospects — Lead Lists (`/api/v1/lead-lists`)](#-16-listes-de-prospects--lead-lists-apiv1lead-lists)
 17. [Enrichissement de Coordonnées (`/api/v1/prospects/{id}/enrichment`)](#-17-enrichissement-de-coordonnées-apiv1prospectsidenrichment)
 18. [Exemple de Client HTTP TypeScript Recommandé](#-18-exemple-de-client-http-typescript-recommandé)
+19. [Tâches Commerciales (`/api/v1/tasks`)](#-19-tâches-commerciales-apiv1tasks)
 
 ---
 
 ## 🌐 1. Conventions Globales, Authentification & Enveloppes
 
 ### URL de Base
-- **Local Dev** : `http://localhost:8080`
-- **Documentation OpenAPI / Swagger UI** : `http://localhost:8080/swagger-ui.html`
-- **Spécification OpenAPI JSON** : `http://localhost:8080/v3/api-docs`
+- **Local Dev** : `http://localhost:8085`
+- **Documentation OpenAPI / Swagger UI** : `http://localhost:8085/swagger-ui.html`
+- **Spécification OpenAPI JSON** : `http://localhost:8085/v3/api-docs`
 
 ### Authentification & Multi-Tenancy
-Toutes les requêtes (sauf les webhooks et les sondes Actuator) doivent inclure le JWT obtenu via **Keycloak** :
+Toutes les requêtes de l'API (sauf les webhooks publics et les sondes Actuator) doivent inclure le JWT Bearer obtenu via **Keycloak** :
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
 Accept: application/json
 X-Trace-Id: <uuid-facultatif>
 ```
+
+#### Configuration Keycloak (Serveur Distant / Production)
+- **Serveur Auth Keycloak** : `https://auth.clatous.com`
+- **Realm** : `clatous-production`
+- **Client ID** : `clatous-backend-prod`
+- **Endpoints OpenID Connect directs** :
+  - **OpenID Discovery** : `https://auth.clatous.com/realms/clatous-production/.well-known/openid-configuration`
+  - **Token Endpoint** : `https://auth.clatous.com/realms/clatous-production/protocol/openid-connect/token`
+  - **JWKS / Certs** : `https://auth.clatous.com/realms/clatous-production/protocol/openid-connect/certs`
+
+> [!TIP]
+> **Flux recommandé pour le Frontend** : Utilisez directement les endpoints unifiés du backend Prospecta (`/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/me`). Le backend orchestre la création Keycloak, l'initialisation de l'organisation multi-tenant (`Organization`), du profil (`UserProfile`) et renvoie directement les tokens JWT (`access_token`, `refresh_token`).
+
 > [!NOTE]
 > Le backend résout l'organisation de l'utilisateur (**Multi-tenancy**) automatiquement depuis le token JWT Keycloak (`sub` lié au profil `UserProfile`). Si `X-Trace-Id` n'est pas envoyé par le front, le serveur en génère un et le renvoie systématiquement dans l'en-tête de réponse `X-Trace-Id`.
 
@@ -117,11 +132,155 @@ En cas d'erreur HTTP (4xx / 5xx), le format renvoyé est rigoureusement identiqu
 | Code HTTP | `error.code` | Description |
 |---|---|---|
 | `400 Bad Request` | `BAD_REQUEST` | Requête syntaxiquement incorrecte |
-| `401 Unauthorized` | `UNAUTHORIZED` | Token JWT absent, invalide ou expiré |
+| `401 Unauthorized` | `UNAUTHORIZED` / `AUTHENTICATION_ERROR` | Token JWT absent/expiré ou authentification provider externe échouée |
 | `403 Forbidden` | `FORBIDDEN` | Permissions insuffisantes (ex: accès hors de son organisation) |
-| `404 Not Found` | `PROSPECT_NOT_FOUND` / `CAMPAIGN_NOT_FOUND` / `COMPANY_NOT_FOUND` | Ressource introuvable |
-| `422 Unprocessable` | `VALIDATION_FAILED` | Erreur de validation bean (@Valid sur les champs DTO) |
+| `404 Not Found` | `PROSPECT_NOT_FOUND` / `CAMPAIGN_NOT_FOUND` / `COMPANY_NOT_FOUND` / `LEAD_LIST_NOT_FOUND` | Ressource introuvable |
+| `422 Unprocessable` | `VALIDATION_FAILED` / `INVALID_REQUEST` | Erreur de validation bean (@Valid sur les champs DTO) |
+| `429 Too Many Requests` | `RATE_LIMITED` | Quota ou limite de requêtes atteinte auprès du fournisseur externe |
+| `502 / 503 Bad Gateway` | `PROVIDER_UNAVAILABLE` / `TIMEOUT` | Fournisseur externe temporairement injoignable ou délai dépassé |
 | `500 Internal Error`| `INTERNAL_SERVER_ERROR`| Erreur serveur non interceptée |
+
+---
+
+## 🔐 1.1 Inscription, Connexion & Session (`/api/v1/auth`)
+
+> [!NOTE]
+> Ces endpoints unifiés sont exposés par le backend Spring Boot (port `8085`) et interagissent directement avec le serveur Keycloak distant (**`https://auth.clatous.com`**, realm **`clatous-production`**, client **`clatous-backend-prod`**). Le frontend n'a pas besoin de gérer des requêtes directes complexes à Keycloak : le backend s'occupe de la création de compte, de l'authentification et de la synchronisation du tenant local.
+
+### 1.1.1 Inscription d'un Nouvel Utilisateur
+
+- **Méthode** : `POST`
+- **Chemin** : `/api/v1/auth/register`
+- **Authentification** : `Publique` (aucun token requis)
+- **Description** : Crée l'utilisateur dans Keycloak (`clatous-production`), initialise son espace de travail / organisation Prospecta (statut `ACTIVE`, plan `FREE`), crée son profil local administrateur (`ORG_ADMIN`) et retourne immédiatement les jetons JWT.
+
+#### Request Body
+```json
+{
+  "firstName": "Mamadou",
+  "lastName": "Diallo",
+  "email": "mamadou.diallo@prospecta.sn",
+  "password": "Password123!",
+  "companyName": "Diallo Consulting",
+  "phone": "+221771234567"
+}
+```
+*(Champs `companyName` et `phone` facultatifs. Si `companyName` est omis, un espace de travail au prénom de l'utilisateur est généré).*
+
+#### Réponse de Succès (HTTP 201 Created)
+```json
+{
+  "data": {
+    "token": {
+      "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6...",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
+      "token_type": "Bearer",
+      "expires_in": 300,
+      "refresh_expires_in": 1800,
+      "scope": "openid profile email"
+    },
+    "user": {
+      "id": "e4b6c338-7801-4475-8167-750d51bead43",
+      "organizationId": "a9019b88-12d4-4bb3-a3d8-5541e2872809",
+      "keycloakSubject": "f7d750c1-c918-47bc-ba91-3829ad417855",
+      "firstName": "Mamadou",
+      "lastName": "Diallo",
+      "fullName": "Mamadou Diallo",
+      "email": "mamadou.diallo@prospecta.sn",
+      "phone": "+221771234567",
+      "jobTitle": null,
+      "role": "ORG_ADMIN",
+      "status": "ACTIVE",
+      "createdAt": "2026-09-12T14:50:00Z",
+      "updatedAt": "2026-09-12T14:50:00Z"
+    }
+  }
+}
+```
+
+---
+
+### 1.1.2 Connexion Utilisateur (Login)
+
+- **Méthode** : `POST`
+- **Chemin** : `/api/v1/auth/login`
+- **Authentification** : `Publique`
+- **Description** : Authentifie les identifiants utilisateur auprès de Keycloak et renvoie le jeton d'accès JWT ainsi que le profil utilisateur.
+
+#### Request Body
+```json
+{
+  "email": "mamadou.diallo@prospecta.sn",
+  "password": "Password123!"
+}
+```
+
+#### Réponse de Succès (HTTP 200 OK)
+```json
+{
+  "data": {
+    "token": {
+      "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6...",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6...",
+      "token_type": "Bearer",
+      "expires_in": 300,
+      "refresh_expires_in": 1800,
+      "scope": "openid profile email"
+    },
+    "user": {
+      "id": "e4b6c338-7801-4475-8167-750d51bead43",
+      "organizationId": "a9019b88-12d4-4bb3-a3d8-5541e2872809",
+      "firstName": "Mamadou",
+      "lastName": "Diallo",
+      "fullName": "Mamadou Diallo",
+      "email": "mamadou.diallo@prospecta.sn",
+      "role": "ORG_ADMIN",
+      "status": "ACTIVE"
+    }
+  }
+}
+```
+
+#### Erreur Identifiants Invalides (HTTP 401 Unauthorized)
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Adresse email ou mot de passe incorrect",
+    "traceId": "9b3c4a22-3a81-4b11-9a74-d41a87756f10"
+  }
+}
+```
+
+---
+
+### 1.1.3 Profil Utilisateur Connecté (Me)
+
+- **Méthode** : `GET`
+- **Chemin** : `/api/v1/auth/me`
+- **Authentification** : Requise (`Authorization: Bearer <access_token>`)
+- **Description** : Récupère les données de profil et l'organisation de l'utilisateur actuellement authentifié.
+
+#### Réponse de Succès (HTTP 200 OK)
+```json
+{
+  "data": {
+    "id": "e4b6c338-7801-4475-8167-750d51bead43",
+    "organizationId": "a9019b88-12d4-4bb3-a3d8-5541e2872809",
+    "keycloakSubject": "f7d750c1-c918-47bc-ba91-3829ad417855",
+    "firstName": "Mamadou",
+    "lastName": "Diallo",
+    "fullName": "Mamadou Diallo",
+    "email": "mamadou.diallo@prospecta.sn",
+    "phone": "+221771234567",
+    "jobTitle": "CEO",
+    "role": "ORG_ADMIN",
+    "status": "ACTIVE",
+    "createdAt": "2026-09-12T14:50:00Z",
+    "updatedAt": "2026-09-12T14:50:00Z"
+  }
+}
+```
 
 ---
 
@@ -140,6 +299,8 @@ Le front peut typer ses interfaces avec ces valeurs strictes :
 - **`OpportunityStage`** : `NEW`, `QUALIFICATION`, `PROPOSAL`, `NEGOTIATION`, `WON`, `LOST`
 - **`OrganizationPlan`** : `FREE`, `STARTER`, `BUSINESS`
 - **`SubscriptionStatus`** : `ACTIVE`, `TRIALING`, `PAST_DUE`, `CANCELED`, `UNPAID`, `INCOMPLETE`
+- **`DiscoveryErrorCode`** : `PROVIDER_UNAVAILABLE`, `RATE_LIMITED`, `INVALID_REQUEST`, `AUTHENTICATION_ERROR`, `NO_RESULTS`, `PROVIDER_ERROR`, `TIMEOUT`
+- **`DiscoverySource`** : `APOLLO`
 
 ---
 
@@ -524,6 +685,14 @@ Le front peut typer ses interfaces avec ces valeurs strictes :
   }
 }
 ```
+
+---
+
+### 5.8. Enrichir les coordonnées d'un prospect (Apollo Match)
+`POST /api/v1/prospects/{id}/enrichment`
+
+Interroge le fournisseur externe pour récupérer l'email direct vérifié, le téléphone mobile/WhatsApp, normalise le numéro et met à jour le statut du prospect à `QUALIFIED` avec recalcul du score.
+*(Pour la documentation exhaustive des paramètres et du comportement de cet endpoint, consulter la [Section 17. Enrichissement de Coordonnées](#-17-enrichissement-de-coordonnées-apiv1prospectsidenrichment)).*
 
 ---
 
@@ -1646,11 +1815,13 @@ Deux modes sont supportés :
 {
   "data": {
     "id": "c1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6f",
+    "organizationId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
     "name": "Sonatel",
-    "domain": "orange.sn",
+    "website": "orange.sn",
     "industry": "Technology",
     "country": "Senegal",
     "city": "Dakar",
+    "employeeCount": 80,
     "linkedinUrl": "https://www.linkedin.com/company/sonatel",
     "externalId": "apollo_org_6401a2b3c4d5e6f7a8b9c0d2",
     "source": "APOLLO"
@@ -1749,16 +1920,26 @@ Les **Lead Lists** permettent de structurer les prospects découverts ou créés
     "items": [
       {
         "id": "d7b1a2c3-e5f6-7a8b-9c0d-1e2f3a4b5c6e",
+        "organizationId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
         "firstName": "Amadou",
         "lastName": "Diallo",
+        "fullName": "Amadou Diallo",
         "email": "a***@orange.sn",
+        "emailStatus": "VALID",
         "phone": "+221338391200",
+        "phoneStatus": "VALID",
+        "whatsappNumber": "+221338391200",
         "jobTitle": "Directeur Général",
         "companyName": "Sonatel",
+        "country": "Sénégal",
+        "city": "Dakar",
         "status": "NEW",
-        "score": 65,
-        "scoreLevel": "MEDIUM",
-        "createdAt": "2026-09-11T10:16:00Z"
+        "leadScore": 65,
+        "leadScoreLevel": "WARM",
+        "leadScoreReasons": "Matching ICP (+30), Décideur technique (+25)",
+        "source": "APOLLO",
+        "createdAt": "2026-09-11T10:16:00Z",
+        "updatedAt": "2026-09-11T10:16:00Z"
       }
     ],
     "page": 0,
@@ -1816,20 +1997,23 @@ L'enrichissement B2B est une action distincte de la recherche : elle cible un pr
 {
   "data": {
     "id": "d7b1a2c3-e5f6-7a8b-9c0d-1e2f3a4b5c6e",
+    "organizationId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
     "firstName": "Amadou",
     "lastName": "Diallo",
+    "fullName": "Amadou Diallo",
     "email": "amadou.diallo@sonatel.sn",
+    "emailStatus": "VALID",
     "phone": "+221771234567",
+    "phoneStatus": "VALID",
+    "whatsappNumber": "+221771234567",
     "jobTitle": "Directeur Général B2B",
     "companyName": "Sonatel",
+    "companyWebsite": "https://orange.sn",
     "status": "QUALIFIED",
-    "score": 88,
-    "scoreLevel": "VERY_HIGH",
-    "externalId": "apollo_6401a2b3c4d5e6f7a8b9c0d1",
-    "metadata": {
-      "enrichedBy": "APOLLO",
-      "enrichedAt": "2026-09-11T10:20:00Z"
-    },
+    "leadScore": 88,
+    "leadScoreLevel": "HOT",
+    "leadScoreReasons": "Matching ICP cible (+30), Décideur technique C-Level (+25), Téléphone mobile vérifié (+15), Email vérifié (+18)",
+    "source": "APOLLO",
     "createdAt": "2026-09-11T10:16:00Z",
     "updatedAt": "2026-09-11T10:20:00Z"
   }
@@ -1861,7 +2045,7 @@ export interface ApiError {
 }
 
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8085',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -1892,34 +2076,262 @@ apiClient.interceptors.response.use(
 );
 ```
 
-### Exemple d'appel d'un endpoint :
+### Modèles TypeScript (Discovery, Lead Lists, Enrichment) :
 ```typescript
-// src/services/prospectService.ts
+// src/types/discovery.ts
+
+export interface DiscoveredPerson {
+  externalId: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
+  companyName?: string;
+  companyDomain?: string;
+  linkedinUrl?: string;
+  country?: string;
+  city?: string;
+  email?: string | null;
+  phoneNumber?: string | null;
+  source: string;
+}
+
+export interface PeopleSearchRequest {
+  firstName?: string;
+  lastName?: string;
+  jobTitles?: string[];
+  companyName?: string;
+  companyDomain?: string;
+  country?: string;
+  city?: string;
+  industry?: string;
+  companySizeMin?: number;
+  companySizeMax?: number;
+  page?: number;
+  size?: number;
+}
+
+export interface PeopleSearchResult {
+  items: DiscoveredPerson[];
+  page: number;
+  size: number;
+  total: number;
+  source: string;
+}
+
+export interface DiscoveredCompany {
+  externalId: string;
+  name: string;
+  domain?: string;
+  industry?: string;
+  country?: string;
+  city?: string;
+  employeeCount?: number;
+  linkedinUrl?: string;
+  source: string;
+}
+
+export interface CompanySearchRequest {
+  name?: string;
+  domain?: string;
+  industry?: string;
+  country?: string;
+  city?: string;
+  companySizeMin?: number;
+  companySizeMax?: number;
+  page?: number;
+  size?: number;
+}
+
+export interface CompanySearchResult {
+  items: DiscoveredCompany[];
+  page: number;
+  size: number;
+  total: number;
+  source: string;
+}
+
+export interface ImportPeopleRequest {
+  prospects?: DiscoveredPerson[];
+  externalIds?: string[];
+  listId?: string;
+  listName?: string;
+}
+
+export interface ImportPeopleReport {
+  importedCount: number;
+  duplicateCount: number;
+  totalProcessed: number;
+  listId?: string;
+  listName?: string;
+  prospectIds: string[];
+}
+
+export interface CreateLeadListRequest {
+  name: string;
+  description?: string;
+}
+
+export interface LeadListResponse {
+  id: string;
+  name: string;
+  description?: string;
+  prospectCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### Exemples d'appels API (Services TypeScript) :
+```typescript
+// src/services/discoveryService.ts
 import { apiClient, ApiResponse } from '@/api/client';
-import { ProspectResponse, CreateProspectRequest, PageResponse } from '@/types';
+import { PageResponse, ProspectResponse } from '@/types';
+import {
+  PeopleSearchRequest,
+  PeopleSearchResult,
+  CompanySearchRequest,
+  CompanySearchResult,
+  ImportPeopleRequest,
+  ImportPeopleReport,
+  CreateLeadListRequest,
+  LeadListResponse,
+  DiscoveredCompany
+} from '@/types/discovery';
 
-export const getProspects = async (status?: string, search?: string, page = 0, size = 20) => {
-  const res = await apiClient.get<ApiResponse<PageResponse<ProspectResponse>>>('/api/v1/prospects', {
-    params: { status, search, page, size, sort: 'createdAt,desc' }
+// 1. Recherche de prospects avec filtres B2B
+export const searchDiscoveredPeople = async (payload: PeopleSearchRequest) => {
+  const res = await apiClient.post<ApiResponse<PeopleSearchResult>>('/api/v1/discovery/people/search', payload);
+  return res.data.data;
+};
+
+// 2. Recherche d'entreprises B2B
+export const searchDiscoveredCompanies = async (payload: CompanySearchRequest) => {
+  const res = await apiClient.post<ApiResponse<CompanySearchResult>>('/api/v1/discovery/companies/search', payload);
+  return res.data.data;
+};
+
+// 3. Importer une sélection de prospects vers une Lead List
+export const importDiscoveredPeople = async (payload: ImportPeopleRequest) => {
+  const res = await apiClient.post<ApiResponse<ImportPeopleReport>>('/api/v1/discovery/people/import', payload);
+  return res.data.data;
+};
+
+// 4. Importer une entreprise
+export const importDiscoveredCompany = async (payload: DiscoveredCompany) => {
+  const res = await apiClient.post<ApiResponse<any>>('/api/v1/discovery/companies/import', payload);
+  return res.data.data;
+};
+
+// 5. Gestion des Lead Lists
+export const getLeadLists = async (page = 0, size = 20) => {
+  const res = await apiClient.get<ApiResponse<PageResponse<LeadListResponse>>>('/api/v1/lead-lists', {
+    params: { page, size, sort: 'createdAt,desc' }
   });
-  return res.data.data; // Renvoie l'objet PageResponse { items: [...], totalElements: ... }
-};
-
-export const createProspect = async (payload: CreateProspectRequest) => {
-  const res = await apiClient.post<ApiResponse<ProspectResponse>>('/api/v1/prospects', payload);
   return res.data.data;
 };
 
-// Recherche Discovery B2B
-export const searchDiscoveredPeople = async (request: any) => {
-  const res = await apiClient.post<ApiResponse<any>>('/api/v1/discovery/people/search', request);
+export const createLeadList = async (payload: CreateLeadListRequest) => {
+  const res = await apiClient.post<ApiResponse<LeadListResponse>>('/api/v1/lead-lists', payload);
   return res.data.data;
 };
 
-// Enrichissement direct
+export const getProspectsInLeadList = async (listId: string, page = 0, size = 25) => {
+  const res = await apiClient.get<ApiResponse<PageResponse<ProspectResponse>>>(`/api/v1/lead-lists/${listId}/prospects`, {
+    params: { page, size }
+  });
+  return res.data.data;
+};
+
+export const addProspectsToLeadList = async (listId: string, prospectIds: string[]) => {
+  await apiClient.post(`/api/v1/lead-lists/${listId}/prospects`, prospectIds);
+};
+
+export const removeProspectFromLeadList = async (listId: string, prospectId: string) => {
+  await apiClient.delete(`/api/v1/lead-lists/${listId}/prospects/${prospectId}`);
+};
+
+// 6. Enrichissement individuel (Apollo Match)
 export const enrichProspect = async (prospectId: string) => {
   const res = await apiClient.post<ApiResponse<ProspectResponse>>(`/api/v1/prospects/${prospectId}/enrichment`);
   return res.data.data;
 };
 ```
+
+---
+
+## 📋 19. Tâches Commerciales (`/api/v1/tasks`)
+
+Gestion des actions et rappels commerciaux de l'équipe de prospection (appels téléphoniques, modèles WhatsApp, relances devis, réunions).
+
+### 19.1 Lister les tâches commerciales
+
+- **Méthode** : `GET`
+- **Chemin** : `/api/v1/tasks`
+- **Query Params** :
+  - `status` (*facultatif*) : `all`, `pending`, `in_progress`, `completed`, `cancelled`
+  - `prospectId` (*facultatif*) : UUID du prospect ciblé
+- **Réponse de Succès (HTTP 200 OK)** :
+```json
+{
+  "data": [
+    {
+      "id": "7b8f9e21-5a33-4b61-9dc2-76fa810c9e01",
+      "type": "call",
+      "title": "Appel de qualification directeur commercial",
+      "prospectId": "4d513df0-a2c3-4dfc-ab83-172108f216a0",
+      "prospectName": "Amadou Ndiaye",
+      "companyName": "Gainde 2000",
+      "phone": "+221775551234",
+      "dueDate": "2026-09-12",
+      "dueTime": "11:00",
+      "assignedTo": "Mor Keblink",
+      "status": "pending",
+      "notes": "Intéressé par la démo CRM et le canal WhatsApp.",
+      "createdAt": "2026-09-12T15:00:00Z",
+      "updatedAt": "2026-09-12T15:00:00Z"
+    }
+  ]
+}
+```
+
+### 19.2 Créer une tâche commerciale
+
+- **Méthode** : `POST`
+- **Chemin** : `/api/v1/tasks`
+- **Request Body** :
+```json
+{
+  "type": "whatsapp",
+  "title": "Envoyer template confirmation démo",
+  "prospectId": "4d513df0-a2c3-4dfc-ab83-172108f216a0",
+  "prospectName": "Aminata Diallo",
+  "companyName": "Wave Digital Finance",
+  "phone": "+221773334455",
+  "dueDate": "2026-09-15",
+  "dueTime": "15:30",
+  "assignedTo": "Mor Keblink",
+  "notes": "Validation horaire démo produit"
+}
+```
+- **Réponse de Succès (HTTP 201 Created)** : Renvoie l'objet tâche créé enveloppé dans `ApiResponse<CommercialTaskResponse>`.
+
+### 19.3 Mettre à jour une tâche commerciale
+
+- **Méthode** : `PATCH`
+- **Chemin** : `/api/v1/tasks/{id}`
+- **Request Body** :
+```json
+{
+  "status": "completed",
+  "notes": "Appel effectué, prospect très intéressé par le pack Pro."
+}
+```
+- **Réponse de Succès (HTTP 200 OK)** : Renvoie l'objet tâche mis à jour.
+
+### 19.4 Supprimer une tâche commerciale
+
+- **Méthode** : `DELETE`
+- **Chemin** : `/api/v1/tasks/{id}`
+- **Réponse de Succès (HTTP 204 No Content)**
+
 

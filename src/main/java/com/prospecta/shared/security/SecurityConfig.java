@@ -51,9 +51,11 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Public Webhooks (Secured via HMAC-SHA256 signature verification in filter/controller)
                         .requestMatchers("/api/v1/webhooks/**").permitAll()
+                        // Public Authentication Endpoints (Login & Register)
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register").permitAll()
                         // Super Admin only Actuator endpoints
                         .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
-                        // All other API endpoints require authentication
+                        // All other API endpoints require authentication (including /api/v1/auth/me)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
                 )
