@@ -95,8 +95,6 @@ application-dev.yaml
 .env.*
 !.env.example
 
-*.env
-
 # Production environment files
 
 .env.production
