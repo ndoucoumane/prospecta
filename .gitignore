@@ -1,43 +1,300 @@
-# Compiled class file
-target/
-*.class
+# ============================================================
 
-# Log file
+# PROSPECTA BACKEND - .gitignore
+
+# Java / Spring Boot / Maven / Docker / IDE / Secrets
+
+# ============================================================
+
+# ------------------------------------------------------------
+
+# Java - Compiled files
+
+# ------------------------------------------------------------
+
+*.class
 *.log
 
-# Package Files
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-# Virtual machine crash logs
-hs_err_pid*
-replay_pid*
+# ------------------------------------------------------------
 
 # Maven
+
+# ------------------------------------------------------------
+
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# Maven Wrapper
+
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
 
-# IDE specific files
+# ------------------------------------------------------------
+
+# Java packages / archives
+
+# ------------------------------------------------------------
+
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# ------------------------------------------------------------
+
+# JVM crash / profiling files
+
+# ------------------------------------------------------------
+
+hs_err_pid*
+replay_pid*
+*.hprof
+
+# ------------------------------------------------------------
+
+# Spring Boot
+
+# ------------------------------------------------------------
+
+spring.log
+application-local.yml
+application-local.yaml
+
+# Local Spring configuration
+
+application-dev.yml
+application-dev.yaml
+
+# IMPORTANT:
+
+# Do NOT ignore application.yml/application.properties
+
+# if they contain only non-sensitive configuration.
+
+#
+
+# If they contain secrets, use environment variables instead.
+
+# ------------------------------------------------------------
+
+# Environment variables / Secrets
+
+# ------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+
+*.env
+
+# Production environment files
+
+.env.production
+.env.prod
+application-prod.yml
+application-prod.yaml
+
+# Secrets / credentials
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+
+# Private SSH keys
+
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
+
+# ------------------------------------------------------------
+
+# IDE - IntelliJ IDEA
+
+# ------------------------------------------------------------
+
 .idea/
 *.iml
 *.iws
 *.ipr
-.vscode/
-.settings/
-.project
-.classpath
 
-# Environment and Secrets
-.env
-.env.local
-*.pem
-*.key
+# ------------------------------------------------------------
+
+# IDE - Eclipse
+
+# ------------------------------------------------------------
+
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+
+# ------------------------------------------------------------
+
+# IDE - VS Code
+
+# ------------------------------------------------------------
+
+.vscode/
+
+# ------------------------------------------------------------
+
+# IDE - NetBeans
+
+# ------------------------------------------------------------
+
+/nbproject/private/
+/nbbuild/
+/dist/
+/.nb-gradle/
+
+# ------------------------------------------------------------
 
 # OS generated files
+
+# ------------------------------------------------------------
+
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+
+# ------------------------------------------------------------
+
+# Docker
+
+# ------------------------------------------------------------
+
+.docker/
+docker-data/
+docker-volumes/
+
+# Local Docker environment files
+
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ------------------------------------------------------------
+
+# Logs
+
+# ------------------------------------------------------------
+
+logs/
+*.log
+*.log.*
+log/
+tmp/
+temp/
+
+# ------------------------------------------------------------
+
+# Test / Coverage
+
+# ------------------------------------------------------------
+
+.coverage/
+coverage/
+jacoco/
+*.exec
+
+# ------------------------------------------------------------
+
+# SonarQube
+
+# ------------------------------------------------------------
+
+.sonar/
+.sonarqube/
+
+# ------------------------------------------------------------
+
+# Build tools
+
+# ------------------------------------------------------------
+
+.gradle/
+build/
+
+# ------------------------------------------------------------
+
+# Temporary files
+
+# ------------------------------------------------------------
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# ------------------------------------------------------------
+
+# OS / editor temporary files
+
+# ------------------------------------------------------------
+
+*.pid
+*.pid.lock
+
+# ------------------------------------------------------------
+
+# Local development data
+
+# ------------------------------------------------------------
+
+data/
+uploads/
+storage/
+
+# ------------------------------------------------------------
+
+# Generated API documentation
+
+# ------------------------------------------------------------
+
+/generated/
+
+# ------------------------------------------------------------
+
+# Security / local credentials
+
+# ------------------------------------------------------------
+
+credentials/
+secrets/
+private/
+certs/
+
+# ------------------------------------------------------------
+
+# Keep example environment files
+
+# ------------------------------------------------------------
+
+!.env.example
+!.env.example.*

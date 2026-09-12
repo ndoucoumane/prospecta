@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+
+//Controller
 @RestController
 @RequestMapping("/api/v1/analytics")
 @RequiredArgsConstructor
