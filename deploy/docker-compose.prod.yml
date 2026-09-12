@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  prospecta-backend:
+    image: prospecta-backend:${IMAGE_TAG:-latest}
+    container_name: prospecta-backend-prod
+    restart: unless-stopped
+    env_file:
+      - /opt/prospecta/production/prospecta-prod.env
+    ports:
+      - "127.0.0.1:8085:8085"
+    networks:
+      - infrastructure-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -s http://127.0.0.1:8085/actuator/health | grep -q 'UP' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  infrastructure-network:
+    external: true

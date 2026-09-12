@@ -1,23 +1,28 @@
-# Guide de Déploiement CI/CD Prospecta (Serveur 180.149.196.68)
+# Guide de Déploiement CI/CD Prospecta (Docker & Jenkins sur 180.149.196.68)
 
-Ce guide détaille la mise en service des environnements **Staging** et **Production** pour l'application **Prospecta Backend** sur le serveur **180.149.196.68** via **Jenkins**.
+Ce guide détaille la mise en service et le pipeline CI/CD automatisé pour l'application **Prospecta Backend** sur le serveur **180.149.196.68** via **Docker**, **Docker Compose** et **Jenkins**.
 
 ---
 
-## 1. Vue d'Ensemble de l'Architecture
+## 1. Vue d'Ensemble de l'Architecture Conteneurisée
 
-Les deux environnements cohabitent sur le serveur `180.149.196.68` de manière totalement isolée :
+Les conteneurs de l'application cohabitent sur le serveur `180.149.196.68` et sont interconnectés via le réseau Docker **`infrastructure-network`** :
 
-| Composant | Staging | Production |
-| :--- | :--- | :--- |
-| **Port d'écoute** | `8082` | `8085` *(évite conflit avec Jenkins sur 8080)* |
-| **Dossier de travail** | `/opt/prospecta/staging/` | `/opt/prospecta/production/` |
-| **Binaire JAR** | `/opt/prospecta/staging/prospecta-backend.jar` | `/opt/prospecta/production/prospecta-backend.jar` |
-| **Sauvegardes (Backups)** | `/opt/prospecta/backups/staging/` | `/opt/prospecta/backups/production/` |
-| **Fichier d'environnement** | `/opt/prospecta/staging/prospecta-staging.env` | `/opt/prospecta/production/prospecta-prod.env` |
-| **Service Systemd** | `prospecta-staging.service` | `prospecta-prod.service` |
-| **Profil Spring** | `staging` | `prod` |
-| **Actuator Health** | `http://180.149.196.68:8082/actuator/health` | `http://180.149.196.68:8085/actuator/health` |
+| Composant | Staging | Production | Rôle & Remarques |
+| :--- | :--- | :--- | :--- |
+| **Port d'écoute VPS** | `127.0.0.1:8086` | `127.0.0.1:8085` | Restreint au localhost (derrière Reverse Proxy Nginx/Caddy) |
+| **Nom du conteneur** | `prospecta-backend-staging` | `prospecta-backend-prod` | Conteneur Docker Java 21 Alpine |
+| **Réseau Docker** | `infrastructure-network` | `infrastructure-network` | Réseau bridge partagé avec PostgreSQL, Redis, Kafka |
+| **Dossier de travail** | `/opt/prospecta/staging/` | `/opt/prospecta/production/` | Contient `docker-compose.yml` et `.env` |
+| **Fichier d'environnement** | `/opt/prospecta/staging/prospecta-staging.env` | `/opt/prospecta/production/prospecta-prod.env` | Secrets injectés au démarrage du conteneur |
+| **Profil Spring** | `staging` | `prod` | `SPRING_PROFILES_ACTIVE` |
+| **Endpoint Santé (Actuator)**| `http://127.0.0.1:8086/actuator/health` | `http://127.0.0.1:8085/actuator/health` | Vérifié en local par Jenkins via SSH |
+
+### Répartition des ports sur le serveur :
+- **8085** : Prospecta Backend Production (`127.0.0.1:8085`)
+- **8086** : Prospecta Backend Staging (`127.0.0.1:8086`)
+- **8082** : Keycloak Auth Server (`127.0.0.1:8082`)
+- **8080 / 8083** : Jenkins CI/CD
 
 ---
 
@@ -28,40 +33,38 @@ Connectez-vous en SSH sur le serveur cible `180.149.196.68` :
 ssh root@180.149.196.68
 ```
 
-Transférez ou clonez le dossier `deploy/` puis exécutez le script d'initialisation :
+Transférez le dossier `deploy/` ou exécutez le script d'initialisation :
 ```bash
 sudo bash deploy/setup-server.sh
 ```
 
 Ce script effectue automatiquement :
-- La vérification / installation d'**OpenJDK 21**
-- La création de l'utilisateur système `prospecta`
-- La création de l'arborescence `/opt/prospecta/` (staging, production, backups)
-- L'installation des services systemd `prospecta-staging.service` et `prospecta-prod.service`
-- L'activation au démarrage (`systemctl enable`)
-- La configuration de `/etc/sudoers.d/prospecta-deploy` pour permettre le redémarrage des services sans mot de passe.
+- L'installation et la configuration de **Docker Engine** et du plugin **docker compose**
+- La création du réseau Docker externe **`infrastructure-network`**
+- La création de l'arborescence `/opt/prospecta/production` et `/opt/prospecta/staging`
+- L'installation des fichiers `docker-compose.yml`
+- La création de l'utilisateur `deploy` avec les permissions Docker requises
 
 ---
 
-## 3. Étape 2 : Configuration des Variables d'Environnement
+## 3. Étape 2 : Configuration des Fichiers d'Environnement
 
-Éditez les fichiers d'environnement avec vos vraies clés (base de données, Redis, Kafka, Keycloak, etc.) :
-
-### Pour le Staging :
-```bash
-nano /opt/prospecta/staging/prospecta-staging.env
-```
+Éditez les fichiers d'environnement avec vos mots de passe et clés API réelles :
 
 ### Pour la Production :
 ```bash
-nano /opt/prospecta/production/prospecta-prod.env
+sudo nano /opt/prospecta/production/prospecta-prod.env
+```
+*(Configurez `DATABASE_PASSWORD`, `OPENAI_API_KEY`, etc.)*
+
+### Pour le Staging :
+```bash
+sudo nano /opt/prospecta/staging/prospecta-staging.env
 ```
 
-Assurez-vous que les permissions soient bien restreintes :
+Sécurisez les permissions :
 ```bash
-chmod 600 /opt/prospecta/staging/prospecta-staging.env
-chmod 600 /opt/prospecta/production/prospecta-prod.env
-chown prospecta:prospecta /opt/prospecta/*/*.env
+sudo chmod 600 /opt/prospecta/*/*.env
 ```
 
 ---
@@ -69,72 +72,63 @@ chown prospecta:prospecta /opt/prospecta/*/*.env
 ## 4. Étape 3 : Configuration de Jenkins
 
 ### A. Prérequis Plugins Jenkins
-Vérifiez que les plugins suivants sont installés sur votre Jenkins :
 - **SSH Agent Plugin** (`ssh-agent`)
 - **Pipeline**
 
-### B. Ajout des Identifiants SSH dans Jenkins
-1. Rendez-vous dans **Jenkins** > **Tableau de bord** > **Gérer Jenkins** > **Credentials** (Identifiants).
+### B. Ajout du Secret SSH dans Jenkins
+1. Rendez-vous dans **Jenkins** > **Tableau de bord** > **Gérer Jenkins** > **Credentials**.
 2. Cliquez sur **(global)** > **Add Credentials** :
    - **Kind** : `SSH Username with private key`
-   - **ID** : `prospecta-server-ssh` *(correspond à la valeur par défaut dans le Jenkinsfile)*
-   - **Description** : `Clé SSH déploiement serveur 180.149.196.68`
-   - **Username** : `root` (ou `deploy` / `jenkins`)
-   - **Private Key** : Collez le contenu de votre clé privée SSH (ou cochez depuis le fichier `~/.ssh/id_rsa`).
-3. Enregistrez.
-
-*(Assurez-vous que la clé publique correspondante est ajoutée dans `~/.ssh/authorized_keys` sur le serveur 180.149.196.68).*
-
-### C. Création du Job Pipeline
-1. Créez un nouvel élément > **Pipeline**.
-2. Dans la section **Pipeline** :
-   - **Definition** : `Pipeline script from SCM`
-   - **SCM** : `Git`
-   - **Repository URL** : URL de votre dépôt Git Prospecta
-   - **Credentials** : Vos accès Git (GitHub / GitLab)
-   - **Branch Specifier** : `*/main`
-   - **Script Path** : `Jenkinsfile`
-3. Sauvegardez.
+   - **ID** : `prospecta-server-ssh`
+   - **Username** : `root` (ou `deploy`)
+   - **Private Key** : Clé privée SSH autorisée sur `180.149.196.68`
 
 ---
 
-## 5. Fonctionnement du Pipeline Jenkins
+## 5. Fonctionnement du Pipeline Jenkins (`Jenkinsfile`)
 
-Lorsque vous lancez un build (**Build with Parameters**) :
-1. **ENVIRONMENT** :
-   - Choisissez `staging` pour tester les nouvelles fonctionnalités sur le port `8082`.
-   - Choisissez `production` pour déployer sur le port `8085`.
-2. **SKIP_TESTS** : Optionnel pour accélérer le build si les tests ont déjà été validés en amont.
-3. **Approval Gate** : Si vous choisissez `production`, le pipeline suspend l'exécution et attend une validation manuelle d'un administrateur avant d'appliquer la mise en production.
-4. **Sauvegarde automatique** : L'ancien JAR est archivé avec un timestamp Unix dans `/opt/prospecta/backups/<env>/prospecta_<timestamp>.jar`.
-5. **Déploiement & Redémarrage** : Le nouveau JAR est transféré et le service `prospecta-<env>` est redémarré.
-6. **Health Check** : Le pipeline vérifie jusqu'à 25 fois si `http://180.149.196.68:<port>/actuator/health` retourne le statut `"UP"`.
-7. **Rollback automatique** : Si l'application ne démarre pas ou échoue au Health Check, le pipeline restaure immédiatement la dernière version fonctionnelle archivée et redémarre le service.
+Le pipeline exécute le cycle complet en conteneur Docker :
+1. **Checkout** : Récupère la dernière version du code source Git.
+2. **Init & Configuration** :
+   - Calcule le port (`8085` pour prod, `8086` pour staging).
+   - Configure les tags d'image Docker (`prod-<BUILD_NUMBER>`, `staging-<BUILD_NUMBER>`).
+3. **Inspect Running Container** : Détecte l'image active pour permettre un rollback ciblé.
+4. **Build & Test Maven** : Compile le JAR avec Java 21 et exécute les tests unitaires.
+5. **Build Docker Image** : Construit l'image Docker locale (`Dockerfile`).
+6. **Approval Gate (Production)** : Interruption pour validation humaine avant la mise en production.
+7. **Deploy to Server** :
+   - Transfère l'image Docker vers le VPS (via Registry ou streaming SSH compressé `docker save | gzip | docker load`).
+   - Copie `docker-compose.yml`.
+   - Lance le conteneur : `IMAGE_TAG=<tag> docker compose up -d --remove-orphans`.
+8. **Health Check Local** :
+   - Exécute le curl sur `http://127.0.0.1:<PORT>/actuator/health` **directement depuis le VPS**.
+   - En cas d'échec : affiche les 100 dernières lignes de logs (`docker logs`) et restaure l'ancienne image.
+9. **Nettoyage automatique** : Prune des anciennes images orphelines et nettoyage du workspace.
 
 ---
 
 ## 6. Commandes Utiles sur le Serveur (180.149.196.68)
 
-### Visualiser le statut des services :
+### Visualiser l'état des conteneurs :
 ```bash
-systemctl status prospecta-staging
-systemctl status prospecta-prod
+docker ps
+cd /opt/prospecta/production && docker compose ps
+cd /opt/prospecta/staging && docker compose ps
 ```
 
-### Consulter les logs en temps réel :
+### Consulter les logs en direct :
 ```bash
-journalctl -u prospecta-staging -f
-journalctl -u prospecta-prod -f
+docker logs -f prospecta-backend-prod
+docker logs -f prospecta-backend-staging
 ```
 
 ### Redémarrer manuellement :
 ```bash
-sudo systemctl restart prospecta-staging
-sudo systemctl restart prospecta-prod
+cd /opt/prospecta/production && docker compose restart
 ```
 
-### Tester manuellement les endpoints de santé :
+### Tester l'état de santé localement :
 ```bash
-curl -i http://localhost:8082/actuator/health   # Staging
-curl -i http://localhost:8085/actuator/health   # Production
+curl -i http://127.0.0.1:8085/actuator/health   # Production
+curl -i http://127.0.0.1:8086/actuator/health   # Staging
 ```
