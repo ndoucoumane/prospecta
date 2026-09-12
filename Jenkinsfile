@@ -42,8 +42,8 @@ pipeline {
         )
         string(
             name: 'SSH_USER',
-            defaultValue: 'root',
-            description: 'Utilisateur SSH sur le serveur cible (ex: root ou deploy)'
+            defaultValue: 'deploy',
+            description: 'Utilisateur SSH sur le serveur cible (ex: deploy ou root)'
         )
         string(
             name: 'DOCKER_REGISTRY',
@@ -236,7 +236,7 @@ pipeline {
                             sh "ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} '${prepCmd}'"
 
                             echo "Copie du descripteur Docker Compose vers ${env.REMOTE_DIR}/docker-compose.yml..."
-                            scp -o StrictHostKeyChecking=no ${composeSource} ${params.SSH_USER}@${params.TARGET_HOST}:${env.REMOTE_DIR}/docker-compose.yml
+                            sh "scp -o StrictHostKeyChecking=no ${composeSource} ${params.SSH_USER}@${params.TARGET_HOST}:${env.REMOTE_DIR}/docker-compose.yml"
 
                             if (params.DOCKER_REGISTRY && params.DOCKER_REGISTRY.trim() != '') {
                                 echo "Push de l'image vers le Registry Docker..."
