@@ -1,5 +1,5 @@
 // =============================================================================
-// Jenkinsfile — Pipeline CI/CD Prospecta Backend (Docker & Docker Compose)
+// Jenkinsfile — Pipeline CI/CD Prospecta Backend (Docker, GHCR & Compose)
 // Déploiement automatisé Staging & Production sur le serveur 180.149.196.68
 // Architecture conteneurisée sur le réseau 'infrastructure-network'
 // =============================================================================
@@ -37,38 +37,29 @@ pipeline {
         )
         string(
             name: 'SSH_CREDENTIALS_ID',
-            defaultValue: 'prospecta-server-ssh',
-            description: 'Identifiant du secret SSH configuré dans Jenkins (SSH Username with private key)'
+            defaultValue: 'deploy',
+            description: 'Identifiant du secret SSH configuré dans Jenkins (deploy)'
         )
         string(
             name: 'SSH_USER',
             defaultValue: 'deploy',
-            description: 'Utilisateur SSH sur le serveur cible (ex: deploy ou root)'
+            description: 'Utilisateur SSH sur le serveur cible'
         )
         string(
             name: 'DOCKER_REGISTRY',
-            defaultValue: '',
-            description: 'Registry Docker optionnel (ex: registry.clatous.com ou laisser vide pour transfert direct SSH)'
+            defaultValue: 'ghcr.io/ndoucoumane',
+            description: 'Registry Docker (GitHub Container Registry ghcr.io/ndoucoumane)'
+        )
+        string(
+            name: 'REGISTRY_CREDENTIALS_ID',
+            defaultValue: 'github-container-registry',
+            description: 'Identifiant du secret GitHub Container Registry configuré dans Jenkins'
         )
     }
 
     environment {
-        APP_NAME           = "prospecta-backend"
-        IMAGE_BASE         = "prospecta-backend"
-        MAVEN_OPTS         = "-Duser.timezone=Africa/Dakar -Dfile.encoding=UTF-8"
-
-        // Variables calculées dynamiquement dans l'étape Init
-        IMAGE_NAME         = ""
-        IMAGE_TAG          = ""
-        FULL_IMAGE_NAME    = ""
-        TARGET_PORT        = ""
-        CONTAINER_NAME     = ""
-        REMOTE_DIR         = ""
-        COMPOSE_FILE       = ""
-        ENV_FILE           = ""
-        HEALTH_URL         = ""
-        DEPLOY_EXECUTED    = false
-        PREVIOUS_IMAGE_TAG = ""
+        APP_NAME   = "prospecta-backend"
+        MAVEN_OPTS = "-Duser.timezone=Africa/Dakar -Dfile.encoding=UTF-8"
     }
 
     stages {
@@ -85,46 +76,34 @@ pipeline {
                 script {
                     echo "=== 2. Configuration pour l'environnement : ${params.ENVIRONMENT} ==="
 
-                    if (params.ENVIRONMENT == 'production') {
-                        env.TARGET_PORT    = "8085"
-                        env.CONTAINER_NAME = "prospecta-backend-prod"
-                        env.REMOTE_DIR     = "/opt/prospecta/production"
-                        env.COMPOSE_FILE   = "docker-compose.prod.yml"
-                        env.ENV_FILE       = "/opt/prospecta/production/prospecta-prod.env"
-                        env.IMAGE_NAME     = "prospecta-backend"
-                        env.IMAGE_TAG      = "prod-${BUILD_NUMBER}"
-                    } else {
-                        // Port 8086 pour éviter le conflit avec Keycloak qui occupe le port 8082
-                        env.TARGET_PORT    = "8086"
-                        env.CONTAINER_NAME = "prospecta-backend-staging"
-                        env.REMOTE_DIR     = "/opt/prospecta/staging"
-                        env.COMPOSE_FILE   = "docker-compose.staging.yml"
-                        env.ENV_FILE       = "/opt/prospecta/staging/prospecta-staging.env"
-                        env.IMAGE_NAME     = "prospecta-backend-staging"
-                        env.IMAGE_TAG      = "staging-${BUILD_NUMBER}"
-                    }
+                    def isStaging = (params.ENVIRONMENT == 'staging')
+                    def rawRegistry = (params.DOCKER_REGISTRY && params.DOCKER_REGISTRY.trim() != '') ? params.DOCKER_REGISTRY.trim() : 'ghcr.io/ndoucoumane'
+                    def registry = rawRegistry.replaceAll('/+$', '')
 
-                    if (params.DOCKER_REGISTRY && params.DOCKER_REGISTRY.trim() != '') {
-                        env.FULL_IMAGE_NAME = "${params.DOCKER_REGISTRY.trim()}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                    } else {
-                        env.FULL_IMAGE_NAME = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                    }
-
-                    // Le healthcheck est testé en LOCAL sur le VPS (car les ports sont restreints à 127.0.0.1)
-                    env.HEALTH_URL = "http://127.0.0.1:${env.TARGET_PORT}/actuator/health"
+                    env.TARGET_PORT     = isStaging ? '8086' : '8085'
+                    env.CONTAINER_NAME  = isStaging ? 'prospecta-backend-staging' : 'prospecta-backend-prod'
+                    env.REMOTE_DIR      = isStaging ? '/opt/prospecta/staging' : '/opt/prospecta/production'
+                    env.COMPOSE_FILE    = isStaging ? 'docker-compose.staging.yml' : 'docker-compose.prod.yml'
+                    env.ENV_FILE        = isStaging ? '/opt/prospecta/staging/prospecta-staging.env' : '/opt/prospecta/production/prospecta-prod.env'
+                    env.IMAGE_NAME      = "${registry}/prospecta-backend${isStaging ? '-staging' : ''}"
+                    env.IMAGE_TAG       = "${isStaging ? 'staging' : 'prod'}-${env.BUILD_NUMBER}"
+                    env.FULL_IMAGE_NAME = "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                    env.HEALTH_URL      = "http://127.0.0.1:${env.TARGET_PORT}/actuator/health"
+                    env.DEPLOY_EXECUTED = 'false'
+                    env.PREVIOUS_IMAGE  = ''
 
                     echo "----------------------------------------------------"
-                    echo " Application       : ${env.APP_NAME}"
-                    echo " Environnement     : ${params.ENVIRONMENT}"
-                    echo " Serveur Cible     : ${params.TARGET_HOST}"
-                    echo " Port VPS (Host)   : ${env.TARGET_PORT}"
-                    echo " Nom Conteneur     : ${env.CONTAINER_NAME}"
-                    echo " Image Docker      : ${env.FULL_IMAGE_NAME}"
-                    echo " Dossier VPS       : ${env.REMOTE_DIR}"
-                    echo " Compose File      : ${env.COMPOSE_FILE}"
-                    echo " Env File (VPS)    : ${env.ENV_FILE}"
-                    echo " Healthcheck VPS   : ${env.HEALTH_URL}"
-                    echo " Mode Déploiement  : ${params.DEPLOY_MODE}"
+                    echo " Application        : ${env.APP_NAME}"
+                    echo " Environnement      : ${params.ENVIRONMENT}"
+                    echo " Serveur Cible      : ${params.TARGET_HOST}"
+                    echo " Port VPS (Host)    : ${env.TARGET_PORT}"
+                    echo " Nom Conteneur      : ${env.CONTAINER_NAME}"
+                    echo " Image Complète     : ${env.FULL_IMAGE_NAME}"
+                    echo " Dossier VPS        : ${env.REMOTE_DIR}"
+                    echo " Fichier Compose    : ${env.COMPOSE_FILE}"
+                    echo " Fichier Env (VPS)  : ${env.ENV_FILE}"
+                    echo " Healthcheck VPS    : ${env.HEALTH_URL}"
+                    echo " Mode Déploiement   : ${params.DEPLOY_MODE}"
                     echo "----------------------------------------------------"
                 }
             }
@@ -139,25 +118,26 @@ pipeline {
                     try {
                         if (params.DEPLOY_MODE == 'ssh') {
                             sshagent(credentials: [params.SSH_CREDENTIALS_ID]) {
-                                env.PREVIOUS_IMAGE_TAG = sh(
+                                env.PREVIOUS_IMAGE = sh(
                                     script: "ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} \"${detectCmd}\"",
                                     returnStdout: true
                                 ).trim()
                             }
                         } else {
-                            env.PREVIOUS_IMAGE_TAG = sh(
+                            env.PREVIOUS_IMAGE = sh(
                                 script: detectCmd,
                                 returnStdout: true
                             ).trim()
                         }
 
-                        if (env.PREVIOUS_IMAGE_TAG && env.PREVIOUS_IMAGE_TAG != '') {
-                            echo "Image actuellement en cours d'exécution : ${env.PREVIOUS_IMAGE_TAG}"
+                        if (env.PREVIOUS_IMAGE && env.PREVIOUS_IMAGE != '') {
+                            echo "Image actuellement active sur le serveur : ${env.PREVIOUS_IMAGE}"
                         } else {
                             echo "Aucun conteneur actif détecté (premier déploiement ou conteneur arrêté)."
                         }
                     } catch (Exception e) {
                         echo "Avertissement lors de la détection de l'image active : ${e.getMessage()}"
+                        env.PREVIOUS_IMAGE = ""
                     }
                 }
             }
@@ -167,13 +147,14 @@ pipeline {
             steps {
                 script {
                     echo "=== 4. Compilation Maven et exécution des tests (Java 21) ==="
-                    def mavenCmd = fileExists('./mvnw') ? "./mvnw" : "mvn"
+                    sh "chmod +x ./mvnw || true"
 
+                    def mavenCmd = fileExists('./mvnw') ? "./mvnw" : "mvn"
                     if (params.SKIP_TESTS) {
-                        echo "Build sans tests unitaires (-DskipTests)..."
+                        echo "Build sans exécution des tests unitaires (-DskipTests)..."
                         sh "${mavenCmd} clean package -DskipTests"
                     } else {
-                        echo "Build avec exécution des tests unitaires..."
+                        echo "Build avec exécution de l'ensemble des tests unitaires..."
                         sh "${mavenCmd} clean package"
                     }
 
@@ -183,13 +164,33 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
                 script {
                     echo "=== 5. Construction de l'image Docker [${env.FULL_IMAGE_NAME}] ==="
                     sh "docker build -t ${env.FULL_IMAGE_NAME} -t ${env.IMAGE_NAME}:latest ."
-                    echo "Vérification locale de l'image créée :"
-                    sh "docker images | grep ${env.IMAGE_NAME} | head -n 5"
+
+                    if (params.DOCKER_REGISTRY && params.DOCKER_REGISTRY.trim() != '') {
+                        echo "Connexion et publication sur GitHub Container Registry (GHCR)..."
+                        withCredentials([
+                            usernamePassword(
+                                credentialsId: params.REGISTRY_CREDENTIALS_ID,
+                                usernameVariable: 'GHCR_USERNAME',
+                                passwordVariable: 'GHCR_TOKEN'
+                            )
+                        ]) {
+                            sh '''
+                                set +x
+                                echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+                                set -x
+                            '''
+                            sh "docker push ${env.FULL_IMAGE_NAME}"
+                            sh "docker push ${env.IMAGE_NAME}:latest"
+                        }
+                        echo "Image publiée avec succès sur GHCR : ${env.FULL_IMAGE_NAME}"
+                    } else {
+                        echo "DOCKER_REGISTRY non configuré : transfert direct via flux SSH."
+                    }
                 }
             }
         }
@@ -215,12 +216,12 @@ pipeline {
             steps {
                 script {
                     echo "=== 6. Déploiement Docker Compose sur ${params.TARGET_HOST} ==="
-                    env.DEPLOY_EXECUTED = true
+                    env.DEPLOY_EXECUTED = 'true'
 
                     def prepCmd = """
                         set -e
                         mkdir -p ${env.REMOTE_DIR}
-                        # Création du réseau Docker s'il n'existe pas encore
+                        # Création du réseau Docker partagé s'il n'existe pas encore
                         docker network create infrastructure-network 2>/dev/null || true
 
                         if [ ! -f ${env.ENV_FILE} ]; then
@@ -239,32 +240,43 @@ pipeline {
                             sh "scp -o StrictHostKeyChecking=no ${composeSource} ${params.SSH_USER}@${params.TARGET_HOST}:${env.REMOTE_DIR}/docker-compose.yml"
 
                             if (params.DOCKER_REGISTRY && params.DOCKER_REGISTRY.trim() != '') {
-                                echo "Push de l'image vers le Registry Docker..."
-                                sh "docker push ${env.FULL_IMAGE_NAME}"
-                                echo "Pull de l'image sur le VPS..."
-                                sh "ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} 'docker pull ${env.FULL_IMAGE_NAME}'"
+                                echo "Authentification GHCR et téléchargement de l'image sur le VPS..."
+                                withCredentials([
+                                    usernamePassword(
+                                        credentialsId: params.REGISTRY_CREDENTIALS_ID,
+                                        usernameVariable: 'GHCR_USERNAME',
+                                        passwordVariable: 'GHCR_TOKEN'
+                                    )
+                                ]) {
+                                    sh """
+                                    set +x
+                                    echo "\$GHCR_TOKEN" | ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} 'docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin'
+                                    set -x
+                                    ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} 'docker pull ${env.FULL_IMAGE_NAME}'
+                                    """
+                                }
                             } else {
                                 echo "Transfert direct de l'image Docker via streaming SSH (docker save | gzip | docker load)..."
                                 sh "docker save ${env.FULL_IMAGE_NAME} | gzip -c | ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} 'gunzip -c | docker load'"
                             }
 
-                            echo "Démarrage du conteneur avec Docker Compose..."
+                            echo "Démarrage du conteneur avec Docker Compose sur le VPS..."
                             sh """
                             ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} '
                                 cd ${env.REMOTE_DIR}
-                                IMAGE_TAG=${env.IMAGE_TAG} docker compose up -d --remove-orphans
+                                FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d --remove-orphans
                             '
                             """
                         }
                     } else {
-                        // Déploiement en mode local (Jenkins s'exécute directement sur le VPS)
+                        // Déploiement en mode local (Jenkins tourne directement sur le VPS)
                         sh prepCmd
                         sh "cp ${composeSource} ${env.REMOTE_DIR}/docker-compose.yml"
 
                         echo "Démarrage du conteneur avec Docker Compose en local..."
                         sh """
                         cd ${env.REMOTE_DIR}
-                        IMAGE_TAG=${env.IMAGE_TAG} docker compose up -d --remove-orphans
+                        FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d --remove-orphans
                         """
                     }
                 }
@@ -279,7 +291,7 @@ pipeline {
                     // Le test est exécuté directement SUR LE SERVEUR via 127.0.0.1:${TARGET_PORT}
                     def checkHealthScript = """
                     set +e
-                    echo "Sondage de l'état de santé sur : ${env.HEALTH_URL}"
+                    echo "Sondage de l'état de santé local sur : ${env.HEALTH_URL}"
                     MAX_ATTEMPTS=25
                     SLEEP_TIME=5
 
@@ -342,8 +354,8 @@ pipeline {
             script {
                 // Le rollback ne se déclenche que si le déploiement a effectivement commencé
                 // et qu'une version précédente valide avait été détectée
-                if (env.DEPLOY_EXECUTED == 'true' && env.PREVIOUS_IMAGE_TAG != '') {
-                    echo "Déclenchement du Rollback automatique vers l'ancienne image : ${env.PREVIOUS_IMAGE_TAG}"
+                if (env.DEPLOY_EXECUTED == 'true' && env.PREVIOUS_IMAGE && env.PREVIOUS_IMAGE.trim() != '') {
+                    echo "Déclenchement du Rollback automatique vers l'ancienne image : ${env.PREVIOUS_IMAGE}"
 
                     def rollbackCmd = """
                         set +e
@@ -351,19 +363,8 @@ pipeline {
                         echo "Arrêt du conteneur défaillant..."
                         docker compose stop || true
 
-                        echo "Restauration de la version précédente [${env.PREVIOUS_IMAGE_TAG}]..."
-                        # Si le tag précédent est identifiable, relance via compose ou docker run
-                        IMAGE_TAG=\$(echo "${env.PREVIOUS_IMAGE_TAG}" | awk -F':' '{print \$2}')
-                        if [ -n "\$IMAGE_TAG" ]; then
-                            IMAGE_TAG=\$IMAGE_TAG docker compose up -d
-                        else
-                            docker run -d --name ${env.CONTAINER_NAME} \
-                                --restart unless-stopped \
-                                --network infrastructure-network \
-                                --env-file ${env.ENV_FILE} \
-                                -p 127.0.0.1:${env.TARGET_PORT}:8085 \
-                                ${env.PREVIOUS_IMAGE_TAG}
-                        fi
+                        echo "Restauration de la version précédente [${env.PREVIOUS_IMAGE}]..."
+                        FULL_IMAGE_NAME="${env.PREVIOUS_IMAGE}" docker compose up -d --remove-orphans
                         echo "Rollback appliqué avec succès."
                     """
 

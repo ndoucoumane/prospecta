@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   prospecta-backend-staging:
-    image: prospecta-backend-staging:${IMAGE_TAG:-latest}
+    image: ${FULL_IMAGE_NAME:-${IMAGE_NAME:-ghcr.io/ndoucoumane/prospecta-backend-staging}:${IMAGE_TAG:-latest}}
     container_name: prospecta-backend-staging
     restart: unless-stopped
     env_file:
