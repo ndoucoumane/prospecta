@@ -72,7 +72,7 @@ public class KeycloakAuthClient {
             throw new KeycloakIntegrationException("Erreur d'authentification Keycloak: " + ex.getStatusText(), HttpStatus.valueOf(ex.getStatusCode().value()));
         } catch (ResourceAccessException ex) {
             log.error("Unable to reach Keycloak server at {}: {}", properties.getAuthServerUrl(), ex.getMessage());
-            throw new KeycloakIntegrationException("Le serveur d'authentification Keycloak est actuellement injoignable");
+            throw new KeycloakIntegrationException("Le serveur d'authentification est actuellement injoignable");
         } catch (Exception ex) {
             log.error("Unexpected error during Keycloak login: {}", ex.getMessage(), ex);
             throw new KeycloakIntegrationException("Erreur inattendue lors de la connexion via Keycloak");
@@ -130,7 +130,7 @@ public class KeycloakAuthClient {
             throw new KeycloakIntegrationException("Erreur lors de la création de l'utilisateur dans Keycloak: " + ex.getResponseBodyAsString(), HttpStatus.valueOf(ex.getStatusCode().value()));
         } catch (ResourceAccessException ex) {
             log.error("Unable to reach Keycloak server at {}: {}", properties.getAuthServerUrl(), ex.getMessage());
-            throw new KeycloakIntegrationException("Le serveur d'authentification Keycloak est actuellement injoignable");
+            throw new KeycloakIntegrationException("Le serveur d'authentification est actuellement injoignable");
         } catch (Exception ex) {
             log.error("Unexpected error creating user in Keycloak: {}", ex.getMessage(), ex);
             throw new KeycloakIntegrationException("Erreur inattendue lors de la création de l'utilisateur dans Keycloak");

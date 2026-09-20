@@ -59,7 +59,7 @@ pipeline {
 
     environment {
         APP_NAME   = "prospecta-backend"
-        MAVEN_OPTS = "-Duser.timezone=Africa/Dakar -Dfile.encoding=UTF-8"
+        MAVEN_OPTS = "-Xmx768m -XX:+UseSerialGC -Duser.timezone=Africa/Dakar -Dfile.encoding=UTF-8"
     }
 
     stages {
@@ -264,7 +264,7 @@ pipeline {
                             sh """
                             ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.TARGET_HOST} '
                                 cd ${env.REMOTE_DIR}
-                                FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d --remove-orphans
+                                FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d
                             '
                             """
                         }
@@ -276,7 +276,7 @@ pipeline {
                         echo "Démarrage du conteneur avec Docker Compose en local..."
                         sh """
                         cd ${env.REMOTE_DIR}
-                        FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d --remove-orphans
+                        FULL_IMAGE_NAME="${env.FULL_IMAGE_NAME}" IMAGE_NAME="${env.IMAGE_NAME}" IMAGE_TAG="${env.IMAGE_TAG}" docker compose up -d
                         """
                     }
                 }
@@ -360,11 +360,11 @@ pipeline {
                     def rollbackCmd = """
                         set +e
                         cd ${env.REMOTE_DIR}
-                        echo "Arrêt du conteneur défaillant..."
-                        docker compose stop || true
+                        echo "Arrêt ciblé du conteneur défaillant [${env.CONTAINER_NAME}]..."
+                        docker stop ${env.CONTAINER_NAME} 2>/dev/null || true
 
                         echo "Restauration de la version précédente [${env.PREVIOUS_IMAGE}]..."
-                        FULL_IMAGE_NAME="${env.PREVIOUS_IMAGE}" docker compose up -d --remove-orphans
+                        FULL_IMAGE_NAME="${env.PREVIOUS_IMAGE}" docker compose up -d
                         echo "Rollback appliqué avec succès."
                     """
 
